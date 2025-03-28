@@ -1,5 +1,7 @@
 package com.shopify.config;
 
+import com.shopify.model.ShopifyToken;
+import com.shopify.repository.ShopifyTokenRepository;
 import com.shopify.service.ShopifyTokenService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
