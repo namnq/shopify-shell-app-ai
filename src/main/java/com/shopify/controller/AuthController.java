@@ -31,6 +31,8 @@ public class AuthController {
     @Value("${shopify.api.secret}")
     private String apiSecret;
 
+    @Value("${shopify.app.base-url}")
+    private String appBaseUrl;
     @GetMapping("/install")
     public Mono<Void> install(@RequestParam String shop, ServerHttpResponse response) {
         String state = UUID.randomUUID().toString();
@@ -38,7 +40,7 @@ public class AuthController {
             "?client_id=" + shopifyService.getApiKey() +
             "&scope=read_products,write_products" +
             "&state=" + state +
-            "&redirect_uri=https://your-app-url.com/auth/callback";
+            "&redirect_uri=" + appBaseUrl + "/auth/callback";
         
         response.addCookie(createStateCookie(state));
         response.setStatusCode(HttpStatus.SEE_OTHER);
