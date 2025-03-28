@@ -39,6 +39,20 @@ npm start
 
 ## 🌐 Deployment Options
 
+### 🐳 Docker Deployment (Recommended)
+```bash
+# 1. Build and start containers
+docker-compose up -d --build
+
+# 2. Generate SSL certificates (optional)
+mkdir certs
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout certs/nginx.key -out certs/nginx.crt
+
+# 3. Access application
+http://localhost
+```
+
 ### Option 1: EC2 Single-Server Deployment
 ```bash
 # 1. Connect to EC2 and install dependencies

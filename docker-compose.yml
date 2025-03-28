@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      - SHOPIFY_API_KEY=${SHOPIFY_API_KEY}
+      - SHOPIFY_API_SECRET=${SHOPIFY_API_SECRET}
+    ports:
+      - "8080:8080"
+    networks:
+      - shopify-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    environment:
+      - REACT_APP_BACKEND_URL=http://backend:8080
+    networks:
+      - shopify-net
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./frontend/build:/usr/share/nginx/html
+      - ./certs:/etc/nginx/certs
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - shopify-net
+
+networks:
+  shopify-net:
