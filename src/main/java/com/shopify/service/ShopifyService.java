@@ -4,21 +4,33 @@ import com.shopify.model.ShopifyToken;
 import com.shopify.model.dto.TokenResponse;
 import com.shopify.repository.ShopifyTokenRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import java.time.Instant;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.util.Base64;
 
 @Service
 public class ShopifyService {
     private final WebClient webClient;
     private final ShopifyTokenRepository tokenRepository;
+    private final JwtEncoder jwtEncoder;
     
     @Value("${shopify.api.key}")
     private String apiKey;
     
     @Value("${shopify.api.secret}")
     private String apiSecret;
+    
+    @Value("${shopify.api.jwt-secret}")
+    private String jwtSecret;
 
     public String getApiKey() {
         return apiKey;
@@ -28,9 +40,47 @@ public class ShopifyService {
         return apiSecret;
     }
 
-    public ShopifyService(WebClient.Builder webClientBuilder, ShopifyTokenRepository tokenRepository) {
+    public ShopifyService(WebClient.Builder webClientBuilder, 
+                        ShopifyTokenRepository tokenRepository,
+                        JwtEncoder jwtEncoder) {
         this.webClient = webClientBuilder.baseUrl("https://{shop}.myshopify.com").build();
         this.tokenRepository = tokenRepository;
+        this.jwtEncoder = jwtEncoder;
+    }
+
+    @Bean
+    public JwtDecoder jwtDecoder() {
+        byte[] decodedKey = Base64.getDecoder().decode(jwtSecret);
+        SecretKey key = new SecretKeySpec(decodedKey, 0, decodedKey.length, "HmacSHA256");
+        return NimbusJwtDecoder.withSecretKey(key).build();
+    }
+
+    @Bean 
+    public JwtEncoder jwtEncoder() {
+        byte[] decodedKey = Base64.getDecoder().decode(jwtSecret);
+        SecretKey key = new SecretKeySpec(decodedKey, 0, decodedKey.length, "HmacSHA256");
+        return new NimbusJwtEncoder(key);
+    }
+
+    public boolean validateToken(String token) {
+        try {
+            Jwt decoded = jwtDecoder().decode(token);
+            return tokenRepository.existsByShopDomain(decoded.getSubject());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public String getShopDomainFromToken(String token) {
+        return jwtDecoder().decode(token).getSubject();
+    }
+
+    public String generateToken(String shopDomain) {
+        Instant now = Instant.now();
+        return jwtEncoder.encode(Jwt.withSubject(shopDomain)
+            .issuedAt(now)
+            .expiresAt(now.plusSeconds(3600))
+            .build()).getTokenValue();
     }
 
     public Mono<String> getShopInfo(String shopDomain) {
