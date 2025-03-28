@@ -1,6 +1,6 @@
-package com.shopify.app.repository;
+package com.shopify.repository;
 
-import com.shopify.app.model.ShopifyToken;
+import com.shopify.model.ShopifyToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 

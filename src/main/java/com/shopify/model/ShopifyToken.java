@@ -1,4 +1,4 @@
-package com.shopify.app.model;
+package com.shopify.model;
 
 import jakarta.persistence.*;
 import java.time.Instant;
