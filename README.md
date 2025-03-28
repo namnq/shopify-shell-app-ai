@@ -39,18 +39,56 @@ npm start
 
 ## 🌐 Deployment Options
 
-### 🐳 Docker Deployment (Recommended)
+### 🐳 Docker Deployment (All-in-One)
+
+#### Prerequisites
+- Docker Engine 20.10+
+- docker-compose 2.0+
+
+#### 1. Clone and Configure
 ```bash
-# 1. Build and start containers
+git clone https://github.com/namnq/shopify-shell-app-ai.git
+cd shopify-shell-app-ai
+```
+
+#### 2. Set Environment Variables
+```bash
+echo "SHOPIFY_API_KEY=your_api_key" > .env
+echo "SHOPIFY_API_SECRET=your_api_secret" >> .env
+```
+
+#### 3. Start the Stack
+```bash
+# Build and run containers
 docker-compose up -d --build
 
-# 2. Generate SSL certificates (optional)
-mkdir certs
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout certs/nginx.key -out certs/nginx.crt
+# Verify running services
+docker-compose ps
+```
 
-# 3. Access application
-http://localhost
+#### 4. Access the Application
+- Frontend: http://localhost
+- Backend API: http://localhost/api
+- Adminer (DB GUI): http://localhost:8081 (if using DB)
+
+#### 5. HTTPS Setup (Optional)
+```bash
+mkdir -p certs
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout certs/nginx.key -out certs/nginx.crt \
+  -subj "/CN=localhost"
+```
+
+#### Common Commands
+```bash
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Rebuild frontend
+docker-compose up -d --build frontend
 ```
 
 ### Option 1: EC2 Single-Server Deployment
