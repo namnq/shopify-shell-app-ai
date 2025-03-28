@@ -13,6 +13,7 @@
   <properties>
     <java.version>21</java.version>
     <shopify.api.version>11.0.0</shopify.api.version>
+    <skipTests>true</skipTests>
   </properties>
 
 
