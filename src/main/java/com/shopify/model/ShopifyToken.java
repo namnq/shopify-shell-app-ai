@@ -69,4 +69,8 @@ public class ShopifyToken {
     public void setExpiresIn(Integer expiresIn) {
         this.expiresIn = expiresIn;
     }
+    
+    public void setId(Long id) {
+        this.id = id;
+    }
 }
