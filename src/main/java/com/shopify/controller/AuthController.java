@@ -2,6 +2,7 @@ package com.shopify.controller;
 
 import com.shopify.service.ShopifyService;
 import com.shopify.util.ShopifyHmacValidator;
+import com.shopify.service.WebhookService;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,10 +20,12 @@ import java.util.UUID;
 public class AuthController {
     
     private final ShopifyService shopifyService;
+    private final WebhookService webhookService;
 
     @Autowired
-    public AuthController(ShopifyService shopifyService) {
+    public AuthController(ShopifyService shopifyService, WebhookService webhookService) {
         this.shopifyService = shopifyService;
+        this.webhookService = webhookService;
     }
     
     @Value("${shopify.api.secret}")
@@ -57,7 +60,9 @@ public class AuthController {
             return Mono.error(new SecurityException("Invalid state parameter"));
         }
 
-        return shopifyService.exchangeCodeForToken(params.get("shop"), params.get("code"));
+        return shopifyService.exchangeCodeForToken(params.get("shop"), params.get("code"))
+    .flatMap(accessToken -> webhookService.registerWebhooks(params.get("shop"), accessToken)
+    .thenReturn(accessToken));
     }
 
     private ResponseCookie createStateCookie(String state) {
