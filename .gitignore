@@ -1,0 +1,28 @@
+# Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Environment files
+.env
+*.env.local
+
+# Frontend
+src/main/frontend/.env
+src/main/frontend/build/
