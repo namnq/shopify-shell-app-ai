@@ -48,12 +48,15 @@ public class AuthController {
     }
 
     @GetMapping("/login")
-    public void login(@RequestParam(required = false) String shop,
-                     @RequestParam(required = false) String host,
-                     @RequestParam(required = false, name = "id_token") String tokenId,
-                     HttpServletResponse response) {
+    public void login(
+                    @RequestParam(required = false) String embedded,
+                    @RequestParam(required = false) String shop,
+                    @RequestParam(required = false) String host,
+                    @RequestParam(required = false, name = "id_token") String tokenId,
+                    HttpServletResponse response) {
         log.info("Initiating login flow for shop: {}", shop);
-        handleLoginFlow(shop, host, tokenId, response);
+        if(isNeedAuthenticate(shop, host, tokenId, response))
+            initiateOAuthFlow(shop, response, embedded);
     }
 
     @GetMapping("/callback")
@@ -70,18 +73,18 @@ public class AuthController {
         return verifyAuthenticationToken(authHeader);
     }
 
-    private void handleLoginFlow(String shop, String host, String tokenId, HttpServletResponse response) {
+    private boolean isNeedAuthenticate(String shop, String host, String tokenId, HttpServletResponse response) {
         if (!isValidShopDomain(shop)) {
             sendErrorResponse(response, HttpStatus.BAD_REQUEST, "Invalid shop parameter");
-            return;
+            return false;
         }
 
         if (isAlreadyAuthenticated(shop, tokenId)) {
             redirectToApp(response, host, shop);
-            return;
+            return false;
         }
-
-        initiateOAuthFlow(shop, response);
+        return true;
+     
     }
 
     private boolean isValidShopDomain(String shop) {
@@ -96,13 +99,21 @@ public class AuthController {
                shop.equals(tokenService.getShopDomainFromToken(token));
     }
 
-    private void initiateOAuthFlow(String shop, HttpServletResponse response) {
+    private void initiateOAuthFlow(String shop, HttpServletResponse response, String embedded) {
         try {
             String state = UUID.randomUUID().toString();
             String normalizedShop = normalizeShopDomain(shop);
             String authUrl = buildAuthorizationUrl(normalizedShop, state);
 
             setStateCookie(response, state);
+            if (StringUtils.isNotBlank(embedded)) {
+                //redirect to authUrl by render a html shopify app bridge redirect
+                response.setContentType("text/html");
+                response.setStatus(HttpStatus.OK.value());
+                response.getWriter().write(createAppBridgeRedirectHtml(authUrl));
+                return;
+                
+            }
             redirect(response, authUrl, HttpStatus.SEE_OTHER);
             
             log.info("Initiated OAuth flow for shop: {}", normalizedShop);
@@ -111,18 +122,54 @@ public class AuthController {
             sendErrorResponse(response, HttpStatus.INTERNAL_SERVER_ERROR, "Failed to initiate OAuth flow");
         }
     }
-
+    
+    private String createAppBridgeRedirectHtml(String authUrl) {
+        return String.format("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Redirecting sto Shopify...</title>
+                    <script src="https://unpkg.com/@shopify/app-bridge"></script>
+                </head>
+                <body>
+                    <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                            var AppBridge = window['app-bridge'];
+                            var createApp = AppBridge.default;
+                            var actions = AppBridge.actions;
+                            var Redirect = actions.Redirect;
+                            
+                            try {
+                                var app = createApp({
+                                    apiKey: '%s',
+                                    host: new URLSearchParams(window.location.search).get('host')
+                                });
+                                
+                                var redirect = Redirect.create(app);
+                                redirect.dispatch(Redirect.Action.ADMIN_PATH, '%s');
+                            } catch (error) {
+                                console.error('App Bridge redirection error:', error);
+                                // Fallback to regular redirect
+                                window.location.href = '%s';
+                            }
+                        });
+                    </script>
+                    <p>Redirecting to Shopify authorization...</p>
+                </body>
+                </html>
+                """, shopifyService.getApiKey(), authUrl, authUrl);
+    }
+    
     private String normalizeShopDomain(String shop) {
         return shop.contains(MYSHOPIFY_DOMAIN) ? shop : shop + MYSHOPIFY_DOMAIN;
     }
 
     private String buildAuthorizationUrl(String shop, String state) {
-        return String.format("https://%s/admin/oauth/authorize" +
+        return String.format("/admin/oauth/authorize" +
                            "?client_id=%s" +
                            "&scope=%s" +
                            "&state=%s" +
                            "&redirect_uri=%s",
-                           shop,
                            shopifyService.getApiKey(),
                            shopifyService.getScopes(),
                            state,
@@ -165,7 +212,6 @@ public class AuthController {
 
     private String exchangeCodeForTokenWithRetry(String shop, String code) throws Exception {
         Exception lastException = null;
-        Thread.sleep(5000);
         for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
             try {
                 return shopifyService.exchangeCodeForToken(shop, code);
@@ -222,7 +268,7 @@ public class AuthController {
     }
 
     protected void completeAuthentication(String host, String shop, HttpServletResponse response) {
-        setSecurityHeaders(response);
+//        setSecurityHeaders(response);
         redirectToApp(response, host, shop);
         log.info("Completed authentication for shop: {}", shop);
     }
@@ -260,6 +306,8 @@ public class AuthController {
     private void redirect(HttpServletResponse response, String url, HttpStatus status) {
         response.setStatus(status.value());
         response.setHeader(HttpHeaders.LOCATION, url);
+        response.setHeader("content-security-policy", "frame-ancestors *");
+        
     }
 
     private void handleCallbackError(HttpServletResponse response, Exception e, String shop) {
