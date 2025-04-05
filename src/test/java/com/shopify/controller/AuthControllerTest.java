@@ -69,12 +69,12 @@ public class AuthControllerTest {
 
     @BeforeEach
     public void setup() {
-        ReflectionTestUtils.setField(authController, "apiSecret", "test-secret");
+//        ReflectionTestUtils.setField(authController, "apiSecret", "test-secret");
         ReflectionTestUtils.setField(authController, "appBaseUrl", "https://test-app.com");
     }
 
     @Test
-    public void standardLogin_WithValidShopAndNoExistingToken_InitiatesOAuth() {
+    public void login_WithValidShopAndNoExistingToken_InitiatesOAuth() {
         // Arrange
         when(tokenRepository.existsByShopDomain(SHOP_DOMAIN)).thenReturn(false);
         when(shopifyService.getRedirectUrl()).thenReturn("https://test-app.com/auth/callback");
@@ -82,7 +82,7 @@ public class AuthControllerTest {
         when(shopifyService.getScopes()).thenReturn("read_products,write_products");
 
         // Act
-        authController.standardLogin(SHOP_DOMAIN, HOST_VALUE, null, response);
+        authController.login(SHOP_DOMAIN, HOST_VALUE, null, response);
 
         // Assert
         verify(response).setStatus(HttpStatus.SEE_OTHER.value());
@@ -91,14 +91,14 @@ public class AuthControllerTest {
     }
 
     @Test
-    public void standardLogin_WithValidShopAndExistingToken_ValidatesToken() {
+    public void login_WithValidShopAndExistingToken_ValidatesToken() {
         // Arrange
         when(tokenRepository.existsByShopDomain(SHOP_DOMAIN)).thenReturn(true);
         when(tokenService.validateToken(TOKEN_VALUE)).thenReturn(true);
         when(tokenService.getShopDomainFromToken(TOKEN_VALUE)).thenReturn(SHOP_DOMAIN);
 
         // Act
-        authController.standardLogin(SHOP_DOMAIN, HOST_VALUE, TOKEN_VALUE, response);
+        authController.login(SHOP_DOMAIN, HOST_VALUE, TOKEN_VALUE, response);
 
         // Assert
         verify(response).setStatus(HttpServletResponse.SC_FOUND);
@@ -106,9 +106,9 @@ public class AuthControllerTest {
     }
 
     @Test
-    public void standardLogin_WithMissingShop_ReturnsBadRequest() {
+    public void login_WithMissingShop_ReturnsBadRequest() {
         // Act
-        authController.standardLogin(null, HOST_VALUE, null, response);
+        authController.login(null, HOST_VALUE, null, response);
 
         // Assert
         verify(response).setStatus(HttpStatus.BAD_REQUEST.value());
