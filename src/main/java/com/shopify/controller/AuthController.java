@@ -67,12 +67,6 @@ public class AuthController {
         processOAuthCallback(params, stateCookie, response);
     }
 
-    @GetMapping("/verify")
-    public ResponseEntity<?> verifyAuth(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader) {
-        log.debug("Verifying authentication token");
-        return verifyAuthenticationToken(authHeader);
-    }
-
     private boolean isNeedAuthenticate(String shop, String host, String tokenId, HttpServletResponse response) {
         if (!isValidShopDomain(shop)) {
             sendErrorResponse(response, HttpStatus.BAD_REQUEST, "Invalid shop parameter");
@@ -103,7 +97,7 @@ public class AuthController {
         try {
             String state = UUID.randomUUID().toString();
             String normalizedShop = normalizeShopDomain(shop);
-            String authUrl = buildAuthorizationUrl(normalizedShop, state);
+            String authUrl = buildAuthorizationUrl( state);
 
             setStateCookie(response, state);
             if (StringUtils.isNotBlank(embedded)) {
@@ -164,7 +158,7 @@ public class AuthController {
         return shop.contains(MYSHOPIFY_DOMAIN) ? shop : shop + MYSHOPIFY_DOMAIN;
     }
 
-    private String buildAuthorizationUrl(String shop, String state) {
+    private String buildAuthorizationUrl( String state) {
         return String.format("/admin/oauth/authorize" +
                            "?client_id=%s" +
                            "&scope=%s" +
@@ -268,15 +262,8 @@ public class AuthController {
     }
 
     protected void completeAuthentication(String host, String shop, HttpServletResponse response) {
-//        setSecurityHeaders(response);
         redirectToApp(response, host, shop);
         log.info("Completed authentication for shop: {}", shop);
-    }
-
-    private void setSecurityHeaders(HttpServletResponse response) {
-        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        response.setHeader("Pragma", "no-cache");
-        response.setHeader("Expires", "0");
     }
 
     private void redirectToApp(HttpServletResponse response, String host, String shop) {
@@ -335,29 +322,13 @@ public class AuthController {
             log.error("Error writing retry response", e);
         }
     }
-
-    private ResponseEntity<?> verifyAuthenticationToken(String authHeader) {
-        if (!isValidAuthHeader(authHeader)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        String token = authHeader.substring(7);
-        try {
-            return tokenService.validateToken(token) ?
-                   ResponseEntity.ok().build() :
-                   ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        } catch (Exception e) {
-            log.error("Token validation error", e);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-    }
-
-    private boolean isValidAuthHeader(String authHeader) {
-        return StringUtils.isNotBlank(authHeader) && authHeader.startsWith("Bearer ");
-    }
-
     private void sendErrorResponse(HttpServletResponse response, HttpStatus status, String message) {
         response.setStatus(status.value());
-        log.error(message);
+        response.setContentType("application/json");
+        try {
+            response.getWriter().write(new ObjectMapper().writeValueAsString(Map.of("error", message)));
+        } catch (Exception e) {
+            log.error("Error writing error response", e);
+        }
     }
 }
