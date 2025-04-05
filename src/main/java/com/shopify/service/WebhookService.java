@@ -9,6 +9,9 @@ import reactor.core.publisher.Mono;
 public class WebhookService {
     @Value("${shopify.api.version}")
     private String apiVersion;
+    
+    @Value("${shopify.webhooks.uninstallUrl}")
+    private String uninstallWebhookUrl;
 
     private final WebClient webClient;
 
@@ -16,22 +19,32 @@ public class WebhookService {
         this.webClient = webClientBuilder.build();
     }
 
-    public Mono<Void> registerWebhooks(String shopDomain, String accessToken) {
+    public void registerWebhooks(String shopDomain, String accessToken) {
         String apiUrl = "https://" + shopDomain + "/admin/api/" + apiVersion + "/webhooks.json";
+        
+        System.out.println("Registering app uninstall webhook at: " + uninstallWebhookUrl);
 
-        return webClient.post()
-            .uri(apiUrl)
-            .header("X-Shopify-Access-Token", accessToken)
-            .bodyValue(buildWebhookPayload())
-            .retrieve()
-            .bodyToMono(Void.class);
+        try {
+            webClient.post()
+                .uri(apiUrl)
+                .header("X-Shopify-Access-Token", accessToken)
+                .bodyValue(buildWebhookPayload())
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+                
+            System.out.println("Webhook registered successfully");
+        } catch (Exception e) {
+            System.err.println("Failed to register webhook: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     private WebhookRegistration buildWebhookPayload() {
         return new WebhookRegistration(
             new Webhook(
                 "app/uninstalled",
-                "https://your-app-url.com/api/webhooks/uninstall",
+                uninstallWebhookUrl,
                 "json"
             )
         );

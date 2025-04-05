@@ -1,13 +1,10 @@
 package com.shopify.config;
 
-import com.shopify.model.ShopifyToken;
-import com.shopify.repository.ShopifyTokenRepository;
 import com.shopify.service.ShopifyTokenService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -38,6 +35,11 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf
+                .ignoringRequestMatchers(
+                    "/auth/**", "/api/auth/**",
+                    "/oauth/**", "/api/oauth/**",
+                    "/webhooks/**", "/api/webhooks/**"
+                )
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .csrfTokenRequestHandler(requestHandler)
             )
@@ -45,12 +47,23 @@ public class SecurityConfig {
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**").permitAll()
-                .requestMatchers("/webhooks/**").permitAll()
+                .requestMatchers(
+                    "/auth/**", "/api/auth/**",
+                    "/oauth/**", "/api/oauth/**",
+                    "/webhooks/**", "/api/webhooks/**",
+                    "/api/graphql",  // For Admin API access
+                    "/api/proxy/**"   // For app proxy if used
+                ).permitAll()
                 .anyRequest().authenticated()
             )
-            .addFilterBefore(new JwtAuthenticationFilter(tokenService), 
-                UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(
+                new JwtAuthenticationFilter(tokenService),
+                UsernamePasswordAuthenticationFilter.class
+            )
+            .headers(headers -> {
+                headers.frameOptions(frame -> frame.disable());
+                headers.cacheControl(cache -> {});
+            }); // Allow frames and disable cache headers
 
         return http.build();
     }
@@ -58,10 +71,20 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("https://*.myshopify.com"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE"));
+        configuration.setAllowedOrigins(Arrays.asList(
+            "https://*.myshopify.com",
+            "https://*.ngrok-free.app",
+            "https://*.ngrok.io"
+        ));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setExposedHeaders(List.of("X-Shopify-API-Version"));
+        configuration.setExposedHeaders(Arrays.asList(
+            "X-Shopify-API-Version",
+            "Location",
+            "Authorization",
+            "Set-Cookie" // Expose Set-Cookie header
+        ));
+        configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;

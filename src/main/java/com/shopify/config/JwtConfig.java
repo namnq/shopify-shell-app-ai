@@ -1,55 +1,70 @@
 package com.shopify.config;
 
-
-import com.nimbusds.jose.JWSAlgorithm;
-import com.nimbusds.jose.jwk.JWK;
-import com.nimbusds.jose.jwk.JWKSet;
-import com.nimbusds.jose.jwk.OctetSequenceKey;
-import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
-import com.nimbusds.jose.jwk.source.JWKSource;
-import com.nimbusds.jose.proc.SecurityContext;
-
+import io.jsonwebtoken.JwtParser;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.core.env.Environment;
+import org.springframework.beans.factory.annotation.Autowired;
 
-import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.Key;
+import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.UUID;
 
 @Configuration
 public class JwtConfig {
-  
-  @Value("${shopify.api.jwt-secret}")
-  private String jwtSecret;
-  
-  @Bean
-  public JwtDecoder jwtDecoder() {
-    byte[] decodedKey = Base64.getDecoder().decode(jwtSecret);
-    SecretKey key = new SecretKeySpec(decodedKey, 0, decodedKey.length, "HmacSHA256");
-    return NimbusJwtDecoder.withSecretKey(key).build();
-  }
-  
-  @Bean
-  public JwtEncoder jwtEncoder() {
-    byte[] decodedKey = Base64.getDecoder().decode(jwtSecret);
-    SecretKey key = new SecretKeySpec(decodedKey, 0, decodedKey.length, "HmacSHA256");
+
+    @Value("${shopify.api.secret}")
+    private String jwtSecret;
     
-    // Create a JWK from the secret key
-    JWK jwk = new OctetSequenceKey.Builder(decodedKey)
-        .keyID(UUID.randomUUID().toString())
-        .algorithm(JWSAlgorithm.HS256)
-        .build();
+    @Autowired
+    private Environment environment;
+
+    @Bean
+    public Key jwtSigningKey() {
+        return new SecretKeySpec(jwtSecret.getBytes(), SignatureAlgorithm.HS256.getJcaName());
+    }
+
+    @Bean
+    public JwtParser jwtParser() {
+        return Jwts.parserBuilder()
+                .setSigningKey(jwtSigningKey())
+                .build();
+    }
     
-    // Create a JWK source
-    JWKSource<SecurityContext> jwkSource = new ImmutableJWKSet<>(new JWKSet(jwk));
-    
-    // Create the encoder with the JWK source
-    return new NimbusJwtEncoder(jwkSource);
-  }
+    private byte[] getSecretKeyBytes() {
+        // For development environments only, generate a random secret if not configured
+        if ((jwtSecret == null || jwtSecret.isEmpty()) &&
+            (environment.getActiveProfiles().length > 0 &&
+             environment.getActiveProfiles()[0].equals("dev"))) {
+            byte[] randomSecret = new byte[64]; // 512 bits
+            new SecureRandom().nextBytes(randomSecret);
+            System.out.println("Using randomly generated key for development");
+            return randomSecret;
+        }
+        
+        try {
+            // Try to decode the secret as Base64
+            byte[] decodedBytes = Base64.getDecoder().decode(jwtSecret);
+            System.out.println("Successfully decoded Base64 secret, length: " + decodedBytes.length + " bytes");
+            return decodedBytes;
+        } catch (IllegalArgumentException e) {
+            System.out.println("Secret is not Base64 encoded, using raw bytes");
+            // If not Base64, use as raw bytes
+            byte[] rawBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
+            
+            // Ensure key is at least 32 bytes (256 bits) for HS256
+            if (rawBytes.length < 32) {
+                throw new IllegalArgumentException("JWT secret must be at least 32 bytes for HS256, current length: "
+                    + rawBytes.length + " bytes");
+            }
+            
+            System.out.println("Using raw secret bytes, length: " + rawBytes.length + " bytes");
+            return rawBytes;
+        }
+    }
 }

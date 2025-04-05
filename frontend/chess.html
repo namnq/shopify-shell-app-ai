@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess vs Bot (2000 ELO)</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
+    <!-- Load jQuery first -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Then load chess.js and chessboard.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+    <!-- Stockfish is loaded as a web worker -->
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1e1e1e, #2d2d2d);
+            font-family: 'Arial', sans-serif;
+            color: #fff;
+        }
+
+        .game-container {
+            display: flex;
+            gap: 40px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .board-container {
+            width: 600px;
+        }
+
+        .info-container {
+            width: 300px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+
+        .status {
+            font-size: 1.2em;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+        }
+
+        .move-history {
+            height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .move-history::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .move-history::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .move-history::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        button {
+            padding: 12px 20px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            background: #4a90e2;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #357abd;
+        }
+
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .difficulty {
+            margin-bottom: 15px;
+        }
+
+        .difficulty select {
+            width: 100%;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 5px;
+        }
+
+        .move {
+            padding: 5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .move:nth-child(odd) {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        #promotion-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1000;
+        }
+
+        .promotion-piece {
+            width: 60px;
+            height: 60px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        .promotion-piece:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="board-container">
+            <div id="board"></div>
+        </div>
+        <div class="info-container">
+            <div class="status" id="status">Game ready. White to move.</div>
+            <div class="difficulty">
+                <select id="difficulty">
+                    <option value="5">Easy (~1600 ELO)</option>
+                    <option value="10" selected>Medium (~2000 ELO)</option>
+                    <option value="15">Hard (~2400 ELO)</option>
+                </select>
+            </div>
+            <div class="move-history" id="pgn"></div>
+            <div class="controls">
+                <button id="startBtn">Start New Game</button>
+                <button id="undoBtn">Undo Move</button>
+                <button id="flipBtn">Flip Board</button>
+            </div>
+        </div>
+    </div>
+    <div id="promotion-modal">
+        <img src="https://chessboardjs.com/img/chesspieces/wikipedia/wQ.png" class="promotion-piece" data-piece="q">
+        <img src="https://chessboardjs.com/img/chesspieces/wikipedia/wR.png" class="promotion-piece" data-piece="r">
+        <img src="https://chessboardjs.com/img/chesspieces/wikipedia/wB.png" class="promotion-piece" data-piece="b">
+        <img src="https://chessboardjs.com/img/chesspieces/wikipedia/wN.png" class="promotion-piece" data-piece="n">
+    </div>
+
+    <script>
+        let board = null;
+        let game = new Chess();
+        let stockfish;
+        try {
+            stockfish = new Worker('stockfish.js');
+        } catch (error) {
+            console.error('Error loading Stockfish:', error);
+            alert('Error loading chess engine. Please check console for details.');
+        }
+        let userColor = 'w';
+        let isThinking = false;
+
+        // Initialize the promotion modal
+        const promotionModal = document.getElementById('promotion-modal');
+        let pendingPromotion = null;
+
+        // Initialize the board
+        function initializeBoard() {
+            if (!window.jQuery || !window.Chessboard) {
+                console.error('Required libraries not loaded');
+                alert('Error: Required chess libraries not loaded properly. Please check your internet connection.');
+                return;
+            }
+            const config = {
+                draggable: true,
+                position: 'start',
+                pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+                onDragStart: onDragStart,
+                onDrop: onDrop,
+                onSnapEnd: onSnapEnd
+            };
+            board = Chessboard('board', config);
+            updateStatus();
+        }
+
+        // Stockfish initialization
+        stockfish.postMessage('uci');
+        stockfish.postMessage('setoption name Skill Level value 10');
+        stockfish.postMessage('isready');
+
+        function setDifficulty(level) {
+            stockfish.postMessage(`setoption name Skill Level value ${level}`);
+        }
+
+        document.getElementById('difficulty').addEventListener('change', function(e) {
+            setDifficulty(e.target.value);
+        });
+
+        // Check if a move is a pawn promotion
+        function isPawnPromotion(source, target) {
+            const piece = game.get(source);
+            return piece && 
+                   piece.type === 'p' && 
+                   (target.charAt(1) === '8' || target.charAt(1) === '1');
+        }
+
+        // Handle promotion piece selection
+        function handlePromotion(source, target) {
+            return new Promise((resolve) => {
+                pendingPromotion = { source, target, resolve };
+                promotionModal.style.display = 'block';
+            });
+        }
+
+        // Add click handlers for promotion pieces
+        document.querySelectorAll('.promotion-piece').forEach(piece => {
+            piece.addEventListener('click', async () => {
+                if (pendingPromotion) {
+                    const promotionPiece = piece.getAttribute('data-piece');
+                    promotionModal.style.display = 'none';
+                    pendingPromotion.resolve(promotionPiece);
+                    pendingPromotion = null;
+                }
+            });
+        });
+
+        function onDragStart(source, piece, position, orientation) {
+            if (game.game_over()) return false;
+            if (isThinking) return false;
+            
+            // Only allow the user to drag their own pieces
+            if ((userColor === 'w' && piece.search(/^b/) !== -1) ||
+                (userColor === 'b' && piece.search(/^w/) !== -1)) {
+                return false;
+            }
+        }
+
+        async function onDrop(source, target) {
+            // Check if it's a pawn promotion
+            if (isPawnPromotion(source, target)) {
+                const promotionPiece = await handlePromotion(source, target);
+                const moveObj = {
+                    from: source,
+                    to: target,
+                    promotion: promotionPiece
+                };
+
+                // Make the move
+                const move = game.move(moveObj);
+                if (move === null) return 'snapback';
+            } else {
+                // Regular move
+                const move = game.move({
+                    from: source,
+                    to: target,
+                    promotion: 'q'
+                });
+
+                if (move === null) return 'snapback';
+            }
+
+            updateStatus();
+            // Make stockfish move
+            makeStockfishMove();
+        }
+
+        function onSnapEnd() {
+            board.position(game.fen());
+        }
+
+        function makeStockfishMove() {
+            isThinking = true;
+            updateStatus();
+            
+            stockfish.postMessage('position fen ' + game.fen());
+            stockfish.postMessage('go depth 15');
+        }
+
+        stockfish.onmessage = function(event) {
+            const message = event.data;
+            
+            if (message.startsWith('bestmove')) {
+                const move = message.split(' ')[1];
+                if (move && move !== '(none)') {
+                    game.move({
+                        from: move.substring(0, 2),
+                        to: move.substring(2, 4),
+                        promotion: move.substring(4, 5)
+                    });
+                    
+                    board.position(game.fen());
+                    updateStatus();
+                }
+                isThinking = false;
+            }
+        };
+
+        function updateStatus() {
+            let status = '';
+            
+            if (isThinking) {
+                status = "Bot is thinking...";
+            } else if (game.game_over()) {
+                if (game.in_checkmate()) {
+                    status = game.turn() === 'w' ? 'Game Over - Black wins!' : 'Game Over - White wins!';
+                } else if (game.in_draw()) {
+                    status = 'Game Over - Draw!';
+                } else {
+                    status = 'Game Over!';
+                }
+            } else {
+                status = game.turn() === 'w' ? 'White to move' : 'Black to move';
+                if (game.in_check()) {
+                    status += ' (CHECK)';
+                }
+            }
+
+            document.getElementById('status').textContent = status;
+            document.getElementById('pgn').textContent = game.pgn();
+        }
+
+        // Button handlers
+        document.getElementById('startBtn').addEventListener('click', () => {
+            game = new Chess();
+            board.start();
+            updateStatus();
+        });
+
+        document.getElementById('undoBtn').addEventListener('click', () => {
+            if (isThinking) return;
+            game.undo();
+            game.undo();
+            board.position(game.fen());
+            updateStatus();
+        });
+
+        document.getElementById('flipBtn').addEventListener('click', () => {
+            board.flip();
+            userColor = userColor === 'w' ? 'b' : 'w';
+            if (userColor === 'b') {
+                makeStockfishMove();
+            }
+        });
+
+        // Initialize the game
+        initializeBoard();
+    </script>
+</body>
+</html>

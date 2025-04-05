@@ -1,0 +1,16 @@
+{
+  "files": {
+    "main.css": "/static/css/main.7b644e8a.css",
+    "main.js": "/static/js/main.07482fea.js",
+    "static/js/453.d855a71b.chunk.js": "/static/js/453.d855a71b.chunk.js",
+    "static/media/web-vitals.umd.cjs": "/static/media/web-vitals.umd.b39edbf8fc6d3f903382.cjs",
+    "index.html": "/index.html",
+    "main.7b644e8a.css.map": "/static/css/main.7b644e8a.css.map",
+    "main.07482fea.js.map": "/static/js/main.07482fea.js.map",
+    "453.d855a71b.chunk.js.map": "/static/js/453.d855a71b.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.7b644e8a.css",
+    "static/js/main.07482fea.js"
+  ]
+}
